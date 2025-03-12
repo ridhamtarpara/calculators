@@ -10,9 +10,9 @@ export default function LoanEMICalculator() {
       maxInterest={30}
       minTerm={1}
       maxTerm={30}
-      defaultAmount={500000}
-      defaultInterest={10.5}
-      defaultTerm={5}
+      defaultAmount={5000000}
+      defaultInterest={9}
+      defaultTerm={15}
     />
   );
 } 

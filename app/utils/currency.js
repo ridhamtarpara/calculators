@@ -95,18 +95,18 @@ export function calculateLoanEMI(principal, ratePerAnnum, tenureYears) {
   const ratePerMonth = ratePerAnnum / (12 * 100);
   const months = tenureYears * 12;
   const emi = principal * ratePerMonth * Math.pow(1 + ratePerMonth, months) / (Math.pow(1 + ratePerMonth, months) - 1);
-  return emi;
+  return Math.round(emi);
 }
 
 export function calculateTotalPayment(emi, tenureYears) {
-  return emi * tenureYears * 12;
+  return Math.round(emi * tenureYears * 12);
 }
 
 export function calculateTotalInterest(totalPayment, principal) {
-  return totalPayment - principal;
+  return Math.round(totalPayment - principal);
 }
 
-export function calculateAmortizationSchedule(principal, ratePerAnnum, tenureYears) {
+export function calculateAmortizationSchedule(principal, ratePerAnnum, tenureYears, prepayments = {}) {
   const ratePerMonth = ratePerAnnum / (12 * 100);
   const months = tenureYears * 12;
   const emi = calculateLoanEMI(principal, ratePerAnnum, tenureYears);
@@ -115,36 +115,72 @@ export function calculateAmortizationSchedule(principal, ratePerAnnum, tenureYea
   let balance = principal;
   let yearlyData = {
     year: 1,
-    openingBalance: balance,
+    openingBalance: Math.round(balance),
     yearlyEMI: 0,
     yearlyInterest: 0,
-    yearlyPrincipal: 0
+    yearlyPrincipal: 0,
+    yearlyPrepayment: 0
   };
   
   for (let month = 1; month <= months; month++) {
-    const interest = balance * ratePerMonth;
-    const principalPaid = emi - interest;
-    balance = balance - principalPaid;
+    // If balance is already zero or less, break the loop
+    if (balance <= 0) {
+      break;
+    }
     
-    yearlyData.yearlyEMI += emi;
+    const interest = Math.round(balance * ratePerMonth);
+    let principalPaid = Math.round(emi - interest);
+    
+    // Apply prepayment if it exists for this month
+    const currentYear = Math.ceil(month / 12);
+    const monthInYear = month % 12 || 12;
+    const monthKey = `${currentYear}-${monthInYear}`;
+    const prepayment = prepayments[monthKey] || (monthInYear === 12 && prepayments[currentYear]) ? 
+                      Math.round(prepayments[monthKey] || prepayments[currentYear]) : 0;
+    
+    // Adjust principal payment if it would make balance negative
+    if (balance < principalPaid + prepayment) {
+      principalPaid = balance - prepayment > 0 ? Math.round(balance - prepayment) : 0;
+    }
+    
+    // Reduce balance by principal and prepayment
+    balance = balance - principalPaid - prepayment;
+    
+    // Ensure balance never goes below zero
+    if (balance < 0) {
+      balance = 0;
+    }
+    
+    yearlyData.yearlyEMI += principalPaid + interest;
     yearlyData.yearlyInterest += interest;
     yearlyData.yearlyPrincipal += principalPaid;
+    yearlyData.yearlyPrepayment += prepayment;
     
-    if (month % 12 === 0 || month === months) {
+    if (month % 12 === 0 || month === months || balance === 0) {
       schedule.push({
         ...yearlyData,
-        closingBalance: balance
+        yearlyEMI: Math.round(yearlyData.yearlyEMI),
+        yearlyInterest: Math.round(yearlyData.yearlyInterest),
+        yearlyPrincipal: Math.round(yearlyData.yearlyPrincipal),
+        yearlyPrepayment: Math.round(yearlyData.yearlyPrepayment),
+        closingBalance: Math.round(balance)
       });
       
-      if (month < months) {
+      if (month < months && balance > 0) {
         yearlyData = {
           year: yearlyData.year + 1,
-          openingBalance: balance,
+          openingBalance: Math.round(balance),
           yearlyEMI: 0,
           yearlyInterest: 0,
-          yearlyPrincipal: 0
+          yearlyPrincipal: 0,
+          yearlyPrepayment: 0
         };
       }
+    }
+    
+    // If balance is zero, we're done
+    if (balance === 0) {
+      break;
     }
   }
   
